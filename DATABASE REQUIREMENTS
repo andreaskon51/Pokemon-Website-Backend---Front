@@ -1,0 +1,429 @@
+================================================================================
+POKÉMARKET DATABASE REQUIREMENTS
+================================================================================
+
+CURRENT STATUS:
+---------------
+✅ 2 tables already exist (User, RefreshToken)
+❌ 7 tables MISSING and REQUIRED
+
+This document lists ALL database tables needed for the PokéMarket application.
+Each table is 100% REQUIRED.
+
+
+================================================================================
+TABLE 1: users (✅ ALREADY EXISTS)
+================================================================================
+
+WHY WE NEED IT:
+- Stores user accounts for authentication
+- Tracks seller ratings and transaction history
+- Required for login/register functionality
+- Every listing, bid, message, and review references a user
+
+SCHEMA:
+-------
+id              UUID (Primary Key)
+username        VARCHAR(30) (Unique, Not Null)
+email           VARCHAR(255) (Unique, Not Null)
+passwordHash    VARCHAR(255) (Not Null)
+avatar          TEXT (URL to profile picture)
+bio             TEXT (User description)
+verified        BOOLEAN (Default: false) - Shows verified badge
+rating          FLOAT (Default: 0) - Average seller rating
+totalReviews    INTEGER (Default: 0) - Count of reviews received
+totalSales      INTEGER (Default: 0) - Count of completed sales
+joinedDate      VARCHAR(50) - Date user registered
+createdAt       TIMESTAMP (Default: now())
+updatedAt       TIMESTAMP (Auto-update on change)
+
+INDEXES:
+- email (for login lookups)
+- username (for profile pages)
+
+
+================================================================================
+TABLE 2: refresh_tokens (✅ ALREADY EXISTS)
+================================================================================
+
+WHY WE NEED IT:
+- Implements secure JWT token rotation for authentication
+- Prevents security vulnerabilities from stolen tokens
+- Each refresh token is single-use and expires after 7 days
+- Required for "stay logged in" functionality
+
+SCHEMA:
+-------
+id          UUID (Primary Key)
+tokenHash   VARCHAR(255) (SHA-256 hash of the actual token)
+userId      UUID (Foreign Key → users.id, CASCADE DELETE)
+expiresAt   TIMESTAMP (Not Null)
+createdAt   TIMESTAMP (Default: now())
+
+INDEXES:
+- userId (to find all tokens for a user)
+- tokenHash (for fast token validation)
+
+
+================================================================================
+TABLE 3: listings (❌ MISSING - CRITICAL!)
+================================================================================
+
+WHY WE NEED IT:
+- THE CORE TABLE OF THE ENTIRE APPLICATION
+- Without this, there are NO cards to buy, sell, trade, or auction
+- Used on: Home page, Search page, Profile page, Dashboard, Detail page
+- Every feature in the app depends on listings existing
+- Currently using mock data - app cannot function in production without this
+
+SCHEMA:
+-------
+id                  UUID (Primary Key)
+sellerId            UUID (Foreign Key → users.id, CASCADE DELETE)
+title               VARCHAR(200) (Not Null) - Display name like "Charizard Base Set PSA 10"
+cardName            VARCHAR(100) (Not Null) - Card name e.g. "Charizard"
+set                 VARCHAR(100) - Pokemon set e.g. "Base Set", "Jungle"
+cardNumber          VARCHAR(50) - Card number in set e.g. "4/102"
+edition             VARCHAR(100) - "1st Edition", "Shadowless", etc.
+language            VARCHAR(50) - "English", "Japanese", etc.
+condition           VARCHAR(50) - "PSA 10", "PSA 9", "Ungraded", etc.
+rarity              VARCHAR(50) - "Common", "Rare Holo", "Secret Rare", etc.
+pokemonType         VARCHAR(50) - "Fire", "Water", "Grass", etc.
+year                INTEGER - Year card was released
+description         TEXT - Detailed description from seller
+images              TEXT[] (Array) - URLs to card photos
+
+listingType         VARCHAR(20) (Not Null) - "sale", "trade", or "auction"
+price               FLOAT (Nullable) - Fixed price for sale listings
+tradePreferences    TEXT (Nullable) - What seller wants to trade for
+startingBid         FLOAT (Nullable) - Starting bid for auctions
+currentBid          FLOAT (Nullable) - Current highest bid
+reservePrice        FLOAT (Nullable) - Minimum acceptable bid
+buyItNowPrice       FLOAT (Nullable) - Instant purchase price for auctions
+auctionEnd          TIMESTAMP (Nullable) - When auction ends
+bidCount            INTEGER (Default: 0) - Number of bids placed
+
+quantity            INTEGER (Default: 1) - How many available
+views               INTEGER (Default: 0) - View count for analytics
+watchers            INTEGER (Default: 0) - Users who favorited this
+status              VARCHAR(20) (Default: 'active') - 'active', 'sold', 'ended', 'traded'
+
+createdAt           TIMESTAMP (Default: now())
+updatedAt           TIMESTAMP (Auto-update)
+
+INDEXES:
+- sellerId (to find all listings by a user)
+- listingType (to filter by sale/trade/auction)
+- status (to show only active listings)
+- pokemonType (for filtering by type)
+- rarity (for filtering by rarity)
+- createdAt (for sorting by newest)
+
+USED IN:
+- Home.tsx - Featured listings carousel
+- Search.tsx - Search and filter cards
+- Profile.tsx - User's active listings
+- Dashboard.tsx - Seller's dashboard
+- ListingDetail.tsx - Individual card details
+- ListingCard.tsx - Card display component
+
+
+================================================================================
+TABLE 4: bids (❌ MISSING - REQUIRED FOR AUCTIONS)
+================================================================================
+
+WHY WE NEED IT:
+- Required for auction functionality
+- Tracks all bids placed on auction listings
+- Shows bid history and current highest bidder
+- Used to calculate currentBid and bidCount on listings
+- Without this, auctions cannot exist
+
+SCHEMA:
+-------
+id          UUID (Primary Key)
+listingId   UUID (Foreign Key → listings.id, CASCADE DELETE)
+userId      UUID (Foreign Key → users.id, CASCADE DELETE)
+amount      FLOAT (Not Null) - Bid amount in dollars
+createdAt   TIMESTAMP (Default: now()) - When bid was placed
+
+INDEXES:
+- listingId (to get all bids for a listing)
+- userId (to get all bids by a user)
+- createdAt (to sort bids chronologically)
+
+USED IN:
+- ListingDetail.tsx - Shows bid history
+- Dashboard.tsx - "My Auctions" tab shows bids received
+- Auction countdown displays bidCount
+
+
+================================================================================
+TABLE 5: conversations (❌ MISSING - REQUIRED FOR MESSAGING)
+================================================================================
+
+WHY WE NEED IT:
+- Required for buyer-seller communication
+- Creates message threads between two users
+- Links conversations to specific listings being discussed
+- Without this, users cannot communicate
+
+SCHEMA:
+-------
+id              UUID (Primary Key)
+user1Id         UUID (Foreign Key → users.id, CASCADE DELETE)
+user2Id         UUID (Foreign Key → users.id, CASCADE DELETE)
+listingId       UUID (Foreign Key → listings.id, SET NULL) - Optional link to listing
+lastMessageAt   TIMESTAMP (Default: now()) - For sorting conversations
+createdAt       TIMESTAMP (Default: now())
+
+UNIQUE CONSTRAINT:
+- (user1Id, user2Id, listingId) - Prevents duplicate conversations
+
+INDEXES:
+- user1Id (to find user's conversations)
+- user2Id (to find user's conversations)
+- lastMessageAt (to sort by most recent activity)
+
+USED IN:
+- Messages.tsx - Displays conversation list
+- Profile.tsx - "Message" button creates conversation
+- Navbar.tsx - Shows unread message count
+
+
+================================================================================
+TABLE 6: messages (❌ MISSING - REQUIRED FOR MESSAGING)
+================================================================================
+
+WHY WE NEED IT:
+- Stores actual message content in conversations
+- Tracks read/unread status for notifications
+- Required for buyer-seller communication about cards
+- Without this, messaging system is non-functional
+
+SCHEMA:
+-------
+id              UUID (Primary Key)
+conversationId  UUID (Foreign Key → conversations.id, CASCADE DELETE)
+senderId        UUID (Foreign Key → users.id, CASCADE DELETE)
+content         TEXT (Not Null) - Message text
+read            BOOLEAN (Default: false) - Read/unread status
+createdAt       TIMESTAMP (Default: now())
+
+INDEXES:
+- conversationId (to get all messages in a conversation)
+- senderId (to identify message author)
+- createdAt (to sort messages chronologically)
+
+USED IN:
+- Messages.tsx - Displays message history
+- Navbar.tsx - Unread count badge
+- Real-time chat interface
+
+
+================================================================================
+TABLE 7: reviews (❌ MISSING - REQUIRED FOR RATINGS)
+================================================================================
+
+WHY WE NEED IT:
+- Stores seller ratings and feedback
+- Builds trust in the marketplace
+- Calculates user.rating and user.totalReviews
+- Prevents fraud by showing seller reputation
+- Without this, no way to verify seller trustworthiness
+
+SCHEMA:
+-------
+id          UUID (Primary Key)
+reviewerId  UUID (Foreign Key → users.id, CASCADE DELETE) - Who wrote the review
+reviewedId  UUID (Foreign Key → users.id, CASCADE DELETE) - Who is being reviewed
+listingId   UUID (Foreign Key → listings.id, SET NULL) - Related listing (optional)
+rating      INTEGER (Not Null) - 1 to 5 stars
+comment     TEXT - Written review
+createdAt   TIMESTAMP (Default: now())
+
+INDEXES:
+- reviewerId (to find reviews written by a user)
+- reviewedId (to find reviews received by a user)
+- createdAt (to sort by newest)
+
+USED IN:
+- Profile.tsx - "Reviews" tab shows user feedback
+- User.rating calculation - Average of all reviews
+- User.totalReviews - Count of reviews received
+- Seller reputation display
+
+
+================================================================================
+TABLE 8: trade_offers (❌ MISSING - REQUIRED FOR TRADES)
+================================================================================
+
+WHY WE NEED IT:
+- Required for trade listing functionality
+- Lets users propose card-for-card trades
+- Tracks offer status (pending, accepted, declined)
+- Without this, trade listings are non-functional
+
+SCHEMA:
+-------
+id              UUID (Primary Key)
+listingId       UUID (Foreign Key → listings.id, CASCADE DELETE)
+fromUserId      UUID (Foreign Key → users.id, CASCADE DELETE) - Who made the offer
+offeredCards    TEXT[] (Array) - Names of cards being offered
+offeredImages   TEXT[] (Array) - URLs to card images
+message         TEXT - Trade proposal message
+status          VARCHAR(20) (Default: 'pending') - 'pending', 'accepted', 'declined', 'countered'
+createdAt       TIMESTAMP (Default: now())
+updatedAt       TIMESTAMP (Auto-update)
+
+INDEXES:
+- listingId (to get all offers for a listing)
+- fromUserId (to get offers made by a user)
+- status (to filter active/pending offers)
+
+USED IN:
+- ListingDetail.tsx - Send/receive trade offers
+- Dashboard.tsx - "Trades" tab shows offers
+- Trade negotiation flow
+
+
+================================================================================
+TABLE 9: watchlist (❌ MISSING - REQUIRED FOR FAVORITES)
+================================================================================
+
+WHY WE NEED IT:
+- Lets users save/favorite listings
+- Tracks listing.watchers count (displayed on cards)
+- Creates user's "Favorites" collection
+- Users need to track cards they're interested in
+- Without this, no way to save listings for later
+
+SCHEMA:
+-------
+id          UUID (Primary Key)
+userId      UUID (Foreign Key → users.id, CASCADE DELETE)
+listingId   UUID (Foreign Key → listings.id, CASCADE DELETE)
+createdAt   TIMESTAMP (Default: now())
+
+UNIQUE CONSTRAINT:
+- (userId, listingId) - User can only favorite a listing once
+
+INDEXES:
+- userId (to get user's favorites)
+- listingId (to count watchers for a listing)
+
+USED IN:
+- ListingDetail.tsx - Heart button to favorite
+- Dashboard.tsx - "Favorites" tab
+- listing.watchers count display
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+TOTAL TABLES NEEDED: 9
+
+ALREADY EXIST (2):
+✅ users
+✅ refresh_tokens
+
+MUST CREATE (7):
+❌ listings         
+❌ bids             
+❌ conversations    
+❌ messages         
+❌ reviews          
+❌ trade_offers     
+❌ watchlist        
+
+PRIORITY ORDER:
+1. listings (HIGHEST PRIORITY) - App is unusable without this
+2. watchlist - For favorites/watchers functionality
+3. bids - For auction functionality
+4. conversations + messages - For user communication
+5. reviews - For seller ratings and trust
+6. trade_offers - For trade functionality
+
+
+================================================================================
+RELATIONSHIPS DIAGRAM
+================================================================================
+
+users
+  ├─ listings (one user has many listings)
+  ├─ bids (one user places many bids)
+  ├─ conversations (one user has many conversations)
+  ├─ messages (one user sends many messages)
+  ├─ reviews_given (one user writes many reviews)
+  ├─ reviews_received (one user receives many reviews)
+  ├─ trade_offers (one user makes many trade offers)
+  ├─ watchlist (one user favorites many listings)
+  └─ refresh_tokens (one user has many tokens)
+
+listings
+  ├─ bids (one listing has many bids)
+  ├─ conversations (one listing may have many conversations about it)
+  ├─ reviews (one listing may have reviews)
+  ├─ trade_offers (one listing receives many trade offers)
+  └─ watchlist (one listing is favorited by many users)
+
+conversations
+  └─ messages (one conversation has many messages)
+
+
+================================================================================
+NOTES FOR IMPLEMENTATION
+================================================================================
+
+1. Use PostgreSQL (already configured in your .env)
+
+2. Use Prisma ORM - easier to manage migrations
+   Command: npx prisma migrate dev --name add_all_tables
+
+3. All IDs should be UUID for security (harder to guess than integers)
+
+4. All foreign keys should have ON DELETE CASCADE or SET NULL:
+   - CASCADE: When parent is deleted, delete child records
+   - SET NULL: When parent is deleted, set foreign key to null
+
+5. Add indexes on frequently queried columns:
+   - All foreign keys
+   - listingType, status (for filtering)
+   - createdAt (for sorting)
+
+6. String arrays (images, offeredCards) are natively supported in PostgreSQL
+
+7. Default values prevent null issues:
+   - rating = 0
+   - totalReviews = 0
+   - bidCount = 0
+   - views = 0
+   - watchers = 0
+
+8. Timestamps (createdAt, updatedAt) automatically managed by Prisma
+
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+After creating tables, verify with:
+
+□ Can users register and login? THIS IS READY
+□ Can users create listings?
+□ Do listings appear on home page?
+□ Can users search/filter listings?
+□ Can users view listing details?
+□ Can users favorite listings?
+□ Does watchers count increment?
+□ Can users place bids on auctions?
+□ Does bidCount increment?
+□ Can users send messages?
+□ Do conversations appear in Messages page?
+□ Can users leave reviews?
+□ Does user.rating update?
+□ Can users make trade offers?
+□ Do offers appear in Dashboard?
+
+An kaneis kati baze ena OK dipla i ena Ready.
