@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── User ───
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique @db.VarChar(30)
+  email         String   @unique @db.VarChar(255)
+  passwordHash  String   @db.VarChar(255)
+  avatar        String   @default("")
+  bio           String   @default("")
+  verified      Boolean  @default(false)
+  rating        Float    @default(0)
+  totalReviews  Int      @default(0)
+  totalSales    Int      @default(0)
+  joinedDate    String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  @@index([email])
+  @@index([username])
+}
+
+// ─── Refresh Token (for secure token rotation) ───
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @db.VarChar(255) // bcrypt hash of the actual token
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
