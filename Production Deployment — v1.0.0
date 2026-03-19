@@ -1,0 +1,16 @@
+🚀 Production Deployment — v1.0.0
+
+PokéMarket is now live at https://game.crdsystems.online
+
+Infrastructure
+
+Deployed to Ubuntu 24 VPS
+Nginx reverse proxy serving static frontend and proxying /api/* to Express backend
+PM2 process manager with auto-restart on reboot
+SSL/HTTPS via Let's Encrypt with Cloudflare DNS
+Stack
+
+Frontend: React + Vite (built to /dist, served by Nginx)
+Backend: Express.js API running on port 3001 via PM2
+Database: PostgreSQL via Supabase (connection pooler)
+Auth: JWT access/refresh token rotation with bcrypt password hashing
